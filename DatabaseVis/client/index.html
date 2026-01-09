@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DatabaseVis</title>
+
+    <!-- Local Assets -->
+    <link rel="stylesheet" href="/assets/fonts.css" />
+    <script src="/assets/tailwindcss.js"></script>
+    <script src="/assets/vue.global.js"></script>
+    <script src="/assets/chart.js"></script>
+
+    <!-- Tailwind Config for Duct Calculator Style -->
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              bg: "#0d0d0d",
+              "border-low": "#1a1614",
+              "border-med": "#2d2621",
+              "text-main": "#f4f4f4",
+              "text-muted": "#6b5c54",
+              "sunset-glow": "#ff8c42",
+              "sunset-dim": "#4a3728",
+              sunset: {
+                dark: "#1a0f1f",
+                darker: "#0f0a14",
+                purple: "#2d1b3d",
+                pink: "#ff6b9d",
+                orange: "#ff8c42",
+                peach: "#ffa07a",
+                coral: "#ff7f50",
+                gold: "#ffd700",
+                rose: "#ff69b4",
+                violet: "#9d4edd",
+                lavender: "#c77dff",
+                accent: "#ff6b9d",
+              },
+              vercel: {
+                black: "#0d0d0d",
+                dark: "#1a1614",
+                gray: "#2d2621",
+                light: "#6b5c54",
+                accents: {
+                  1: "#1a1614",
+                  2: "#2d2621",
+                  3: "#4a3728",
+                  4: "#6b5c54",
+                  5: "#8b7c74",
+                  6: "#ab9c94",
+                  7: "#cbbcb4",
+                  8: "#f4f4f4",
+                },
+                blue: "#ff8c42",
+                violet: "#9d4edd",
+                cyan: "#ffa07a",
+                success: "#ff8c42",
+                warning: "#ffd700",
+                error: "#ff6b9d",
+              },
+            },
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+              mono: ["Roboto Mono", "monospace"],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      body {
+        background-color: #000;
+        color: #f4f4f4;
+        font-family: "Inter", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        min-height: 100vh;
+      }
+      .geist-card {
+        background: linear-gradient(135deg, #12100e 0%, #0d0d0d 100%);
+        border: 1px solid #1a1614;
+        border-radius: 0;
+        transition: all 0.3s ease;
+      }
+      .geist-card:hover {
+        border-color: #2d2621;
+        box-shadow: 0 0 20px rgba(255, 140, 66, 0.05);
+      }
+      /* Custom Sunset Scrollbar */
+      html {
+        scrollbar-width: thin;
+        scrollbar-color: #ff6b9d #000;
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #000;
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: linear-gradient(
+          180deg,
+          #ff8c42 0%,
+          #ff6b9d 50%,
+          #9d4edd 100%
+        );
+        border-radius: 10px;
+        border: 2px solid #000;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(
+          180deg,
+          #ffa07a 0%,
+          #ff69b4 50%,
+          #c77dff 100%
+        );
+      }
+      ::-webkit-scrollbar-corner {
+        background: #000;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .animate-pulse-slow {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      .skeleton-box {
+        background: #1a1614;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="min-h-screen flex flex-col">
+      <!-- NavBar -->
+      <nav
+        class="border-b border-vercel-gray sticky top-0 z-50 bg-black/80 backdrop-blur-md"
+      >
+        <div
+          class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-xl tracking-tight">DatabaseVis</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <a
+              href="#"
+              @click.prevent="navigate('/stats')"
+              :class="{'text-white': currentTab === 'stats', 'text-vercel-accents-5': currentTab !== 'stats'}"
+              class="text-sm font-medium transition-colors hover:text-white"
+              >Stats</a
+            >
+            <a
+              href="#"
+              @click.prevent="navigate('/interactions')"
+              :class="{'text-white': currentTab === 'interactions', 'text-vercel-accents-5': currentTab !== 'interactions'}"
+              class="text-sm font-medium transition-colors hover:text-white"
+              >Interactions</a
+            >
+            <a
+              href="#"
+              @click.prevent="navigate('/mappings')"
+              :class="{'text-white': currentTab === 'mappings', 'text-vercel-accents-5': currentTab !== 'mappings'}"
+              class="text-sm font-medium transition-colors hover:text-white"
+              >Mappings</a
+            >
+          </div>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="flex-1 max-w-7xl mx-auto w-full px-6 py-10">
+        <!-- STATS PAGE -->
+        <div v-if="currentTab === 'stats'" class="animate-fade-in">
+          <div class="mb-12">
+            <h1 class="text-4xl font-bold mb-2">Dataset Statistics</h1>
+            <p class="text-vercel-accents-5">
+              Comprehensive overview of the database metrics
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <!-- Total Interactions -->
+            <div class="geist-card p-6">
+              <div
+                class="text-vercel-accents-5 text-xs uppercase tracking-wider font-semibold mb-2"
+              >
+                Total Interactions
+              </div>
+              <div
+                v-if="loading"
+                class="h-10 w-32 skeleton-box animate-pulse-slow"
+              ></div>
+              <div v-else class="text-4xl font-bold font-mono tracking-tight">
+                {{ formatNumber(detailedStats.total_interactions || 0) }}
+              </div>
+            </div>
+
+            <!-- Total Mappings -->
+            <div class="geist-card p-6">
+              <div
+                class="text-vercel-accents-5 text-xs uppercase tracking-wider font-semibold mb-2"
+              >
+                Total Mappings
+              </div>
+              <div
+                v-if="loading"
+                class="h-10 w-32 skeleton-box animate-pulse-slow"
+              ></div>
+              <div v-else class="text-4xl font-bold font-mono tracking-tight">
+                {{ formatNumber(detailedStats.total_mappings || 0) }}
+              </div>
+            </div>
+
+            <!-- Unique Drugs -->
+            <div class="geist-card p-6">
+              <div
+                class="text-vercel-accents-5 text-xs uppercase tracking-wider font-semibold mb-2"
+              >
+                Unique Drugs
+              </div>
+              <div
+                v-if="loading"
+                class="h-10 w-24 skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-else
+                class="text-4xl font-bold font-mono tracking-tight text-vercel-blue"
+              >
+                {{ formatNumber(detailedStats.unique_drugs || 0) }}
+              </div>
+              <div class="text-vercel-accents-5 text-xs mt-2">ChEMBL IDs</div>
+            </div>
+
+            <!-- Unique Proteins -->
+            <div class="geist-card p-6">
+              <div
+                class="text-vercel-accents-5 text-xs uppercase tracking-wider font-semibold mb-2"
+              >
+                Unique Proteins
+              </div>
+              <div
+                v-if="loading"
+                class="h-10 w-24 skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-else
+                class="text-4xl font-bold font-mono tracking-tight text-vercel-blue"
+              >
+                {{ formatNumber(detailedStats.unique_proteins || 0) }}
+              </div>
+              <div class="text-vercel-accents-5 text-xs mt-2">UniProt IDs</div>
+            </div>
+
+            <!-- Unique MedDRA Terms -->
+            <div class="geist-card p-6">
+              <div
+                class="text-vercel-accents-5 text-xs uppercase tracking-wider font-semibold mb-2"
+              >
+                Unique MedDRA Terms
+              </div>
+              <div
+                v-if="loading"
+                class="h-10 w-24 skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-else
+                class="text-4xl font-bold font-mono tracking-tight text-purple-400"
+              >
+                {{ formatNumber(detailedStats.unique_meddra || 0) }}
+              </div>
+              <div class="text-vercel-accents-5 text-xs mt-2">
+                Side Effect Terms
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Section -->
+          <div class="grid grid-cols-1 gap-8 mt-12">
+            <!-- Label Distribution Chart (Maintain focus, but full width container) -->
+            <div class="geist-card p-6">
+              <h3 class="text-xl font-bold mb-6">
+                Interaction Label Distribution
+              </h3>
+              <div
+                v-if="loading"
+                class="h-[300px] w-full skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-show="!loading"
+                class="h-[300px] flex items-center justify-center"
+              >
+                <canvas id="labelChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Top Side Effects Chart -->
+            <div class="geist-card p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Top Adverse Drug Reactions</h3>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-xs text-vercel-accents-5 uppercase font-bold"
+                    @click="console.log('Limit changed')"
+                    >Limit</span
+                  >
+                  <input
+                    v-model.number="limits.sideEffects"
+                    @change="fetchTopSideEffects"
+                    type="number"
+                    class="w-20 bg-black border border-vercel-gray rounded px-2 py-1 text-sm focus:outline-none focus:border-white"
+                  />
+                </div>
+              </div>
+              <div
+                v-if="loadingStates.sideEffects"
+                :style="{ height: calculateHeight(limits.sideEffects) }"
+                class="w-full skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-show="!loadingStates.sideEffects"
+                :style="{ height: calculateHeight(chartData.sideEffects.length) }"
+              >
+                <canvas id="sideEffectsChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Top Drugs Chart -->
+            <div class="geist-card p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Most Interactive Drugs</h3>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-xs text-vercel-accents-5 uppercase font-bold"
+                    >Limit</span
+                  >
+                  <input
+                    v-model.number="limits.drugs"
+                    @change="fetchTopDrugs"
+                    type="number"
+                    class="w-20 bg-black border border-vercel-gray rounded px-2 py-1 text-sm focus:outline-none focus:border-white"
+                  />
+                </div>
+              </div>
+              <div
+                v-if="loadingStates.drugs"
+                :style="{ height: calculateHeight(limits.drugs) }"
+                class="w-full skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-show="!loadingStates.drugs"
+                :style="{ height: calculateHeight(chartData.drugs.length) }"
+              >
+                <canvas id="drugsChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Top Targets Chart -->
+            <div class="geist-card p-6">
+              <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold">Most Targeted Proteins</h3>
+                <div class="flex items-center gap-2">
+                  <span
+                    class="text-xs text-vercel-accents-5 uppercase font-bold"
+                    >Limit</span
+                  >
+                  <input
+                    v-model.number="limits.targets"
+                    @change="fetchTopTargets"
+                    type="number"
+                    class="w-20 bg-black border border-vercel-gray rounded px-2 py-1 text-sm focus:outline-none focus:border-white"
+                  />
+                </div>
+              </div>
+              <div
+                v-if="loadingStates.targets"
+                :style="{ height: calculateHeight(limits.targets) }"
+                class="w-full skeleton-box animate-pulse-slow"
+              ></div>
+              <div
+                v-show="!loadingStates.targets"
+                :style="{ height: calculateHeight(chartData.targets.length) }"
+              >
+                <canvas id="targetsChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIST VIEWS (Stats, Search, Table) -->
+        <div
+          v-if="currentTab === 'interactions' || currentTab === 'mappings'"
+          class="animate-fade-in"
+        >
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            <div
+              v-for="stat in stats"
+              :key="stat.table_name"
+              class="geist-card p-6"
+            >
+              <div
+                class="text-vercel-accents-5 text-sm uppercase tracking-wider font-semibold mb-2"
+              >
+                {{ stat.table_name }}
+              </div>
+              <div class="text-4xl font-bold font-mono tracking-tight">
+                {{ formatNumber(stat.row_count) }}
+              </div>
+              <div class="text-vercel-accents-5 text-sm mt-2">
+                Total Records
+              </div>
+            </div>
+          </div>
+
+          <!-- Search & Filter -->
+          <div class="mb-8">
+            <div class="relative">
+              <div
+                class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+              >
+                <svg
+                  class="h-5 w-5 text-vercel-accents-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  ></path>
+                </svg>
+              </div>
+              <input
+                v-model="searchQuery"
+                @keyup.enter="performSearch"
+                type="text"
+                class="block w-full pl-10 pr-3 py-3 border border-vercel-gray rounded-md leading-5 bg-black text-white placeholder-vercel-accents-5 focus:outline-none focus:border-white focus:ring-1 focus:ring-white sm:text-sm transition-colors"
+                :placeholder="currentTab === 'interactions' ? 'Search by Drug ID, Target ID, or SMILES...' : 'Search by MedDRA Name or Ingredient ID...'"
+              />
+            </div>
+          </div>
+
+          <!-- Data Table -->
+          <div class="geist-card overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-vercel-gray">
+                <thead class="bg-vercel-accents-1">
+                  <tr>
+                    <th
+                      v-for="header in currentHeaders"
+                      :key="header"
+                      class="px-6 py-3 text-left text-xs font-medium text-vercel-accents-5 uppercase tracking-wider"
+                    >
+                      {{ header }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="bg-black divide-y divide-vercel-gray">
+                  <tr v-if="loading" class="animate-pulse">
+                    <td
+                      :colspan="currentHeaders.length"
+                      class="px-6 py-4 text-center text-vercel-accents-5"
+                    >
+                      Loading data...
+                    </td>
+                  </tr>
+                  <tr v-else-if="data.length === 0">
+                    <td
+                      :colspan="currentHeaders.length"
+                      class="px-6 py-4 text-center text-vercel-accents-5"
+                    >
+                      No results found.
+                    </td>
+                  </tr>
+                  <tr
+                    v-else
+                    v-for="(item, index) in data"
+                    :key="index"
+                    class="hover:bg-vercel-accents-1 transition-colors"
+                  >
+                    <td
+                      v-for="key in currentKeys"
+                      :key="key"
+                      class="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono"
+                    >
+                      <div class="max-w-xs truncate" :title="item[key]">
+                        {{ item[key] }}
+                      </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        v-if="currentTab === 'interactions'"
+                        @click="viewInteraction(item.drug_chembl_id, item.target_uniprot_id)"
+                        class="text-vercel-blue hover:text-white transition-colors"
+                      >
+                        View
+                      </button>
+                      <button
+                        v-if="currentTab === 'mappings'"
+                        @click="viewIngredient(item.rxnorm_ingredient_id)"
+                        class="text-vercel-blue hover:text-white transition-colors"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination -->
+            <div
+              class="bg-black px-4 py-3 flex items-center justify-between border-t border-vercel-gray sm:px-6"
+            >
+              <div class="flex-1 flex justify-between sm:hidden">
+                <button
+                  @click="prevPage"
+                  :disabled="page <= 1"
+                  class="relative inline-flex items-center px-4 py-2 border border-vercel-gray text-sm font-medium rounded-md text-gray-300 bg-black hover:bg-vercel-accents-1"
+                >
+                  Previous
+                </button>
+                <button
+                  @click="nextPage"
+                  :disabled="page * limit >= total"
+                  class="relative ml-3 inline-flex items-center px-4 py-2 border border-vercel-gray text-sm font-medium rounded-md text-gray-300 bg-black hover:bg-vercel-accents-1"
+                >
+                  Next
+                </button>
+              </div>
+              <div
+                class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p class="text-sm text-vercel-accents-5">
+                    Showing
+                    <span class="font-medium text-white"
+                      >{{ (page - 1) * limit + 1 }}</span
+                    >
+                    to
+                    <span class="font-medium text-white"
+                      >{{ Math.min(page * limit, total) }}</span
+                    >
+                    of
+                    <span class="font-medium text-white">{{ total }}</span>
+                    results
+                  </p>
+                </div>
+                <div>
+                  <nav
+                    class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px"
+                    aria-label="Pagination"
+                  >
+                    <button
+                      @click="prevPage"
+                      :disabled="page <= 1"
+                      class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-vercel-gray bg-black text-sm font-medium text-gray-400 hover:bg-vercel-accents-1 disabled:opacity-50"
+                    >
+                      <span class="sr-only">Previous</span>
+                      <svg
+                        class="h-5 w-5"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      @click="nextPage"
+                      :disabled="page * limit >= total"
+                      class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-vercel-gray bg-black text-sm font-medium text-gray-400 hover:bg-vercel-accents-1 disabled:opacity-50"
+                    >
+                      <span class="sr-only">Next</span>
+                      <svg
+                        class="h-5 w-5"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fill-rule="evenodd"
+                          d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INGREDIENT DETAIL VIEW -->
+        <div v-if="currentTab === 'ingredient-details'" class="animate-fade-in">
+          <button
+            @click="goBack"
+            class="mb-4 text-vercel-blue hover:underline flex items-center gap-2"
+          >
+            &larr; Back
+          </button>
+
+          <h2 class="text-3xl font-bold mb-6">
+            Ingredient Details:
+            <span class="font-mono text-vercel-accents-5"
+              >{{ selectedId }}</span
+            >
+          </h2>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Side Effects -->
+            <div class="geist-card p-6 flex flex-col h-full">
+              <h3
+                class="text-xl font-semibold mb-4 border-b border-vercel-gray pb-2"
+              >
+                Side Effects
+              </h3>
+              <div class="overflow-y-auto flex-1 min-h-[300px]">
+                <ul class="space-y-2">
+                  <li
+                    v-for="se in detailData.side_effects"
+                    :key="se.meddra_id"
+                    class="text-gray-300"
+                  >
+                    <span class="text-vercel-accents-5 mr-2"
+                      >{{ se.meddra_id }}</span
+                    >
+                    {{ se.meddra_name }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Interactions Summary -->
+            <div class="space-y-8">
+              <!-- Positive Interactions -->
+              <div class="geist-card p-6">
+                <h3
+                  class="text-xl font-semibold mb-4 border-b border-vercel-gray pb-2 text-vercel-success"
+                >
+                  Interacting Proteins ({{
+                  detailData.positive_interactions?.length || 0 }})
+                </h3>
+                <div class="overflow-y-auto max-h-60">
+                  <table class="w-full text-left">
+                    <thead>
+                      <tr class="text-vercel-accents-5 text-xs uppercase">
+                        <th class="pb-2">Target ID</th>
+                        <th class="pb-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="pi in detailData.positive_interactions"
+                        :key="pi.target_uniprot_id"
+                        class="border-b border-vercel-gray/30 last:border-0"
+                      >
+                        <td class="py-2 font-mono text-sm">
+                          {{ pi.target_uniprot_id }}
+                        </td>
+                        <td class="py-2">
+                          <button
+                            @click="viewInteraction(pi.drug_chembl_id, pi.target_uniprot_id)"
+                            class="text-xs bg-vercel-accents-2 hover:bg-vercel-accents-3 px-2 py-1 rounded transition-colors"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Negative Interactions -->
+              <div class="geist-card p-6">
+                <h3
+                  class="text-xl font-semibold mb-4 border-b border-vercel-gray pb-2 text-vercel-error"
+                >
+                  Non-Interacting Proteins ({{
+                  detailData.negative_interactions?.length || 0 }})
+                </h3>
+                <div class="overflow-y-auto max-h-60">
+                  <table class="w-full text-left">
+                    <thead>
+                      <tr class="text-vercel-accents-5 text-xs uppercase">
+                        <th class="pb-2">Target ID</th>
+                        <th class="pb-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="ni in detailData.negative_interactions"
+                        :key="ni.target_uniprot_id"
+                        class="border-b border-vercel-gray/30 last:border-0"
+                      >
+                        <td class="py-2 font-mono text-sm">
+                          {{ ni.target_uniprot_id }}
+                        </td>
+                        <td class="py-2">
+                          <button
+                            @click="viewInteraction(ni.drug_chembl_id, ni.target_uniprot_id)"
+                            class="text-xs bg-vercel-accents-2 hover:bg-vercel-accents-3 px-2 py-1 rounded transition-colors"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INTERACTION DETAIL VIEW -->
+        <div
+          v-if="currentTab === 'interaction-details'"
+          class="animate-fade-in"
+        >
+          <button
+            @click="goBack"
+            class="mb-4 text-vercel-blue hover:underline flex items-center gap-2"
+          >
+            &larr; Back
+          </button>
+
+          <h2 class="text-3xl font-bold mb-6">Interaction Details</h2>
+
+          <div class="grid grid-cols-1 gap-8">
+            <!-- Main Info -->
+            <div class="geist-card p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span
+                    class="block text-vercel-accents-5 uppercase text-xs font-bold"
+                    >Drug ChEMBL ID</span
+                  >
+                  <span class="font-mono text-lg"
+                    >{{ detailData.interaction.drug_chembl_id }}</span
+                  >
+                </div>
+                <div>
+                  <span
+                    class="block text-vercel-accents-5 uppercase text-xs font-bold"
+                    >Target UniProt ID</span
+                  >
+                  <span class="font-mono text-lg"
+                    >{{ detailData.interaction.target_uniprot_id }}</span
+                  >
+                </div>
+                <div>
+                  <span
+                    class="block text-vercel-accents-5 uppercase text-xs font-bold"
+                    >Label</span
+                  >
+                  <span
+                    :class="{'text-vercel-success': detailData.interaction.label === 1, 'text-vercel-error': detailData.interaction.label === 0}"
+                    class="font-bold text-lg"
+                  >
+                    {{ detailData.interaction.label === 1 ? 
+                      'Positive Interaction' : 'Negative Interaction' }}
+                  </span>
+                </div>
+                <div>
+                  <span
+                    class="block text-vercel-accents-5 uppercase text-xs font-bold"
+                    >RXCUI</span
+                  >
+                  <span class="font-mono"
+                    >{{ detailData.interaction.rxcui }}</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- Molecules & Sequences -->
+            <div class="geist-card p-6 space-y-4">
+              <div>
+                <span
+                  class="block text-vercel-accents-5 uppercase text-xs font-bold mb-1"
+                  >SMILES</span
+                >
+                <div
+                  class="bg-black border border-vercel-gray rounded p-3 font-mono text-xs break-all"
+                >
+                  {{ detailData.interaction.smiles }}
+                </div>
+              </div>
+              <div>
+                <span
+                  class="block text-vercel-accents-5 uppercase text-xs font-bold mb-1"
+                  >Sequence</span
+                >
+                <div
+                  class="bg-black border border-vercel-gray rounded p-3 font-mono text-xs break-all max-h-40 overflow-y-auto"
+                >
+                  {{ detailData.interaction.sequence }}
+                </div>
+              </div>
+            </div>
+
+            <!-- RDKit Mol File (Expandable) -->
+            <div class="geist-card p-6">
+              <button
+                @click="molFileExpanded = !molFileExpanded"
+                class="w-full flex items-center justify-between text-left"
+              >
+                <h3 class="text-xl font-semibold">RDKit Mol File</h3>
+                <svg
+                  :class="{'rotate-180': molFileExpanded}"
+                  class="h-5 w-5 text-vercel-accents-5 transition-transform"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 9l-7 7-7-7"
+                  ></path>
+                </svg>
+              </button>
+              <div
+                v-show="molFileExpanded"
+                class="mt-4 bg-black border border-vercel-gray rounded p-3 font-mono text-xs break-all max-h-96 overflow-y-auto"
+              >
+                <pre v-if="detailData.interaction.molfile_3d">
+{{ detailData.interaction.molfile_3d }}</pre
+                >
+                <div v-else class="text-vercel-accents-5 italic">
+                  No mol file data available
+                </div>
+              </div>
+            </div>
+
+            <!-- Associated Side Effects -->
+            <div class="geist-card p-6">
+              <h3
+                class="text-xl font-semibold mb-4 border-b border-vercel-gray pb-2"
+              >
+                Associated Side Effects (via {{ detailData.interaction.rxcui }})
+              </h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                <div
+                  v-for="se in detailData.side_effects"
+                  :key="se.meddra_id"
+                  class="text-sm bg-vercel-accents-1 px-3 py-2 rounded border border-vercel-gray/30"
+                >
+                  {{ se.meddra_name }}
+                </div>
+              </div>
+              <div
+                v-if="!detailData.side_effects || detailData.side_effects.length === 0"
+                class="text-vercel-accents-5 italic"
+              >
+                No side effects found linked to RXCUI {{
+                detailData.interaction.rxcui }}.
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer
+        class="border-t border-vercel-gray py-6 text-center text-vercel-accents-5 text-sm"
+      >
+        Powered by FastAPI & Vue.js
+      </footer>
+    </div>
+
+    <script>
+      const { createApp, ref, onMounted, watch, computed } = Vue;
+
+      createApp({
+        setup() {
+          const stats = ref([]);
+          const data = ref([]);
+          const total = ref(0);
+          const page = ref(1);
+          const limit = ref(20);
+          const loading = ref(false);
+          const searchQuery = ref("");
+          const currentTab = ref("interactions"); // 'stats', 'interactions', 'mappings', 'ingredient-details', 'interaction-details'
+          const selectedId = ref(null);
+          const detailData = ref({});
+          const molFileExpanded = ref(false);
+          const previousTab = ref(null);
+          const detailedStats = ref({});
+
+          const limits = ref({
+            drugs: 10,
+            targets: 10,
+            sideEffects: 10,
+          });
+
+          const chartData = ref({
+            drugs: [],
+            targets: [],
+            sideEffects: [],
+          });
+
+          const loadingStates = ref({
+            drugs: false,
+            targets: false,
+            sideEffects: false,
+          });
+
+          // Computed Headers and Keys based on Tab
+          const currentHeaders = computed(() => {
+            if (currentTab.value === "interactions") {
+              return [
+                "Drug ChEMBL ID",
+                "Target UniProt ID",
+                "Label",
+                "SMILES",
+                "RXCUI",
+                "Actions",
+              ];
+            } else if (currentTab.value === "mappings") {
+              return ["Ingredient ID", "MedDRA ID", "MedDRA Name", "Actions"];
+            }
+            return [];
+          });
+
+          const currentKeys = computed(() => {
+            if (currentTab.value === "interactions") {
+              return [
+                "drug_chembl_id",
+                "target_uniprot_id",
+                "label",
+                "smiles",
+                "rxcui",
+              ];
+            } else {
+              return ["rxnorm_ingredient_id", "meddra_id", "meddra_name"];
+            }
+          });
+
+          // SPA Router - Maps paths to views
+          const router = {
+            "/": "interactions",
+            "/stats": "stats",
+            "/interactions": "interactions",
+            "/mappings": "mappings",
+          };
+
+          const navigate = (path, state = {}) => {
+            window.history.pushState(state, "", path);
+            handleRoute();
+          };
+
+          const handleRoute = () => {
+            const path = window.location.pathname;
+            const params = new URLSearchParams(window.location.search);
+
+            // Route: /drug-details?rxcui=...
+            if (path === "/drug-details") {
+              const rxcui = params.get("rxcui");
+              if (rxcui) {
+                selectedId.value = rxcui;
+                viewIngredient(rxcui, false);
+              }
+              return;
+            }
+
+            // Route: /interaction-details?drug=...&target=...
+            if (path === "/interaction-details") {
+              const drug = params.get("drug");
+              const target = params.get("target");
+              if (drug && target) {
+                viewInteraction(drug, target, false);
+              }
+              return;
+            }
+
+            // Route: /interactions or /mappings or /stats or /
+            const view = router[path] || "interactions";
+            currentTab.value = view;
+
+            // Handle query params for list views
+            const p = parseInt(params.get("page"));
+            if (!isNaN(p)) page.value = p;
+
+            const s = params.get("search");
+            if (s) searchQuery.value = s;
+            else searchQuery.value = "";
+
+            // Fetch data for views that need it
+            if (view === "stats") {
+              fetchDetailedStats();
+            } else if (view === "interactions" || view === "mappings") {
+              fetchData();
+            }
+          };
+
+          const formatNumber = (num) => {
+            return new Intl.NumberFormat().format(num);
+          };
+
+          const fetchDetailedStats = async () => {
+            loading.value = true;
+            try {
+              const res = await fetch("/api/detailed-stats");
+              detailedStats.value = await res.json();
+
+              // Initialize Label Chart
+              setTimeout(() => {
+                initLabelChart();
+              }, 100);
+
+              // Sub-calls for independent charts
+              fetchTopDrugs();
+              fetchTopTargets();
+              fetchTopSideEffects();
+            } catch (e) {
+              console.error("Failed to fetch detailed stats", e);
+            } finally {
+              loading.value = false;
+            }
+          };
+
+          const fetchTopDrugs = async () => {
+            loadingStates.value.drugs = true;
+            try {
+              const res = await fetch(
+                `/api/top-drugs?limit=${limits.value.drugs}`
+              );
+              chartData.value.drugs = await res.json();
+              setTimeout(() => initDrugsChart(), 100);
+            } finally {
+              loadingStates.value.drugs = false;
+            }
+          };
+
+          const fetchTopTargets = async () => {
+            loadingStates.value.targets = true;
+            try {
+              const res = await fetch(
+                `/api/top-targets?limit=${limits.value.targets}`
+              );
+              chartData.value.targets = await res.json();
+              setTimeout(() => initTargetsChart(), 100);
+            } finally {
+              loadingStates.value.targets = false;
+            }
+          };
+
+          const fetchTopSideEffects = async () => {
+            loadingStates.value.sideEffects = true;
+            try {
+              const res = await fetch(
+                `/api/top-side-effects?limit=${limits.value.sideEffects}`
+              );
+              chartData.value.sideEffects = await res.json();
+              setTimeout(() => initSideEffectsChart(), 100);
+            } finally {
+              loadingStates.value.sideEffects = false;
+            }
+          };
+
+          let charts = {
+            label: null,
+            sideEffects: null,
+            drugs: null,
+            targets: null,
+          };
+
+          const initLabelChart = () => {
+            const labelCtx = document.getElementById("labelChart");
+            if (labelCtx && detailedStats.value.label_distribution) {
+              if (charts.label) charts.label.destroy();
+              charts.label = new Chart(labelCtx, {
+                type: "doughnut",
+                data: {
+                  labels: ["Positive (1)", "Negative (0)"],
+                  datasets: [
+                    {
+                      data: [
+                        detailedStats.value.label_distribution["1"] || 0,
+                        detailedStats.value.label_distribution["0"] || 0,
+                      ],
+                      backgroundColor: ["#ff8c42", "#ff6b9d"],
+                      borderWidth: 0,
+                      hoverOffset: 10,
+                    },
+                  ],
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: {
+                      position: "bottom",
+                      labels: { color: "#8b7c74", font: { family: "Inter" } },
+                    },
+                  },
+                  cutout: "70%",
+                },
+              });
+            }
+          };
+
+          const initSideEffectsChart = () => {
+            const seCtx = document.getElementById("sideEffectsChart");
+            const dataItems = chartData.value.sideEffects;
+            if (seCtx && dataItems.length) {
+              if (charts.sideEffects) charts.sideEffects.destroy();
+              charts.sideEffects = new Chart(seCtx, {
+                type: "bar",
+                data: {
+                  labels: dataItems.map((se) => se.meddra_name),
+                  datasets: [
+                    {
+                      label: "Frequency",
+                      data: dataItems.map((se) => se.count),
+                      backgroundColor: "#9d4edd",
+                      borderRadius: 4,
+                      barPercentage: 0.8, // 8px bar in 10px category = 2px gap
+                      categoryPercentage: 1.0,
+                    },
+                  ],
+                },
+                options: {
+                  indexAxis: "y",
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      grid: { color: "#1a1614", borderDash: [2, 2] },
+                      ticks: { color: "#8b7c74" },
+                    },
+                    y: {
+                      grid: { display: false },
+                      ticks: {
+                        color: "#f4f4f4",
+                        font: { size: 10 },
+                        padding: 10,
+                      },
+                    },
+                  },
+                  plugins: { legend: { display: false } },
+                },
+              });
+            }
+          };
+
+          const initDrugsChart = () => {
+            const ctx = document.getElementById("drugsChart");
+            const dataItems = chartData.value.drugs;
+            if (ctx && dataItems.length) {
+              if (charts.drugs) charts.drugs.destroy();
+              charts.drugs = new Chart(ctx, {
+                type: "bar",
+                data: {
+                  labels: dataItems.map((d) => d.drug_chembl_id),
+                  datasets: [
+                    {
+                      label: "Interactions",
+                      data: dataItems.map((d) => d.count),
+                      backgroundColor: "#ff8c42", // Keep orange for drugs
+                      borderRadius: 4,
+                      barPercentage: 0.8, // 8px bar in 10px category = 2px gap
+                      categoryPercentage: 1.0,
+                    },
+                  ],
+                },
+                options: {
+                  indexAxis: "y",
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      grid: { color: "#1a1614", borderDash: [2, 2] },
+                      ticks: { color: "#8b7c74" },
+                    },
+                    y: {
+                      grid: { display: false },
+                      ticks: {
+                        color: "#f4f4f4",
+                        font: { size: 10 },
+                        padding: 10,
+                      },
+                    },
+                  },
+                  plugins: { legend: { display: false } },
+                },
+              });
+            }
+          };
+
+          const initTargetsChart = () => {
+            const ctx = document.getElementById("targetsChart");
+            const dataItems = chartData.value.targets;
+            if (ctx && dataItems.length) {
+              if (charts.targets) charts.targets.destroy();
+              charts.targets = new Chart(ctx, {
+                type: "bar",
+                data: {
+                  labels: dataItems.map((t) => t.target_uniprot_id),
+                  datasets: [
+                    {
+                      label: "Interactions",
+                      data: dataItems.map((t) => t.count),
+                      backgroundColor: "#ff6b9d", // Pink color from theme
+                      borderRadius: 4,
+                      barPercentage: 0.8, // 8px bar in 10px category = 2px gap
+                      categoryPercentage: 1.0,
+                    },
+                  ],
+                },
+                options: {
+                  indexAxis: "y",
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    x: {
+                      grid: { color: "#1a1614", borderDash: [2, 2] },
+                      ticks: { color: "#8b7c74" },
+                    },
+                    y: {
+                      grid: { display: false },
+                      ticks: {
+                        color: "#f4f4f4",
+                        font: { size: 10 },
+                        padding: 10,
+                      },
+                    },
+                  },
+                  plugins: { legend: { display: false } },
+                },
+              });
+            }
+          };
+
+          const fetchStats = async () => {
+            try {
+              const res = await fetch("/api/stats");
+              stats.value = await res.json();
+            } catch (e) {
+              console.error("Failed to fetch stats", e);
+            }
+          };
+
+          const fetchData = async () => {
+            if (
+              currentTab.value !== "interactions" &&
+              currentTab.value !== "mappings"
+            )
+              return;
+
+            loading.value = true;
+            try {
+              const endpoint =
+                currentTab.value === "interactions"
+                  ? "/api/interactions"
+                  : "/api/mappings";
+              const params = new URLSearchParams({
+                page: page.value,
+                limit: limit.value,
+              });
+              if (searchQuery.value) {
+                params.append("search", searchQuery.value);
+              }
+
+              const res = await fetch(`${endpoint}?${params}`);
+              const result = await res.json();
+              data.value = result.data;
+              total.value = result.total;
+
+              // Update URL with current state
+              const path =
+                currentTab.value === "interactions"
+                  ? "/interactions"
+                  : "/mappings";
+              const url = `${path}?${params.toString()}`;
+              window.history.replaceState({}, "", url);
+            } catch (e) {
+              console.error("Failed to fetch data", e);
+            } finally {
+              loading.value = false;
+            }
+          };
+
+          const performSearch = () => {
+            page.value = 1; // Reset to first page on new search
+            fetchData();
+          };
+
+          const nextPage = () => {
+            if (page.value * limit.value < total.value) {
+              page.value++;
+              fetchData();
+            }
+          };
+
+          const prevPage = () => {
+            if (page.value > 1) {
+              page.value--;
+              fetchData();
+            }
+          };
+
+          const viewIngredient = async (rxcui, pushNav = true) => {
+            loading.value = true;
+            previousTab.value = currentTab.value;
+
+            try {
+              const res = await fetch(`/api/ingredient/${rxcui}`);
+              detailData.value = await res.json();
+              selectedId.value = rxcui;
+              currentTab.value = "ingredient-details";
+
+              if (pushNav) {
+                navigate(`/drug-details?rxcui=${rxcui}`);
+              }
+
+              window.scrollTo(0, 0);
+            } catch (e) {
+              alert("Failed to load ingredient details");
+            } finally {
+              loading.value = false;
+            }
+          };
+
+          const viewInteraction = async (drugId, targetId, pushNav = true) => {
+            loading.value = true;
+            if (currentTab.value !== "ingredient-details") {
+              previousTab.value = currentTab.value;
+            }
+
+            try {
+              const res = await fetch(`/api/interaction/${drugId}/${targetId}`);
+              detailData.value = await res.json();
+              currentTab.value = "interaction-details";
+
+              if (pushNav) {
+                navigate(
+                  `/interaction-details?drug=${drugId}&target=${targetId}`
+                );
+              }
+
+              window.scrollTo(0, 0);
+            } catch (e) {
+              alert("Failed to load interaction details");
+            } finally {
+              loading.value = false;
+            }
+          };
+
+          const goBack = () => {
+            window.history.back();
+          };
+
+          const calculateHeight = (count) => {
+            const minHeight = 350;
+            const barHeight = 10; // Even smaller as requested
+            const padding = 80;
+            return `${Math.max(minHeight, count * barHeight + padding)}px`;
+          };
+
+          // Handle browser back/forward buttons
+          window.addEventListener("popstate", handleRoute);
+
+          onMounted(() => {
+            handleRoute();
+            fetchStats();
+          });
+
+          return {
+            stats,
+            data,
+            loading,
+            currentTab,
+            searchQuery,
+            page,
+            limit,
+            total,
+            currentHeaders,
+            currentKeys,
+            fetchData,
+            performSearch,
+            nextPage,
+            prevPage,
+            formatNumber,
+            viewIngredient,
+            viewInteraction,
+            goBack,
+            navigate,
+            detailData,
+            detailedStats,
+            selectedId,
+            molFileExpanded,
+            fetchDetailedStats,
+            limits,
+            loadingStates,
+            fetchTopDrugs,
+            fetchTopTargets,
+            fetchTopSideEffects,
+            calculateHeight,
+            chartData,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

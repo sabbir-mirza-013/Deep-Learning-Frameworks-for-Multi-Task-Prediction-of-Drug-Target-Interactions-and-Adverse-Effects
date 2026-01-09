@@ -1,0 +1,15 @@
+Tables found: 2
+
+Table: meddra_mappings
+  - rxnorm_ingredient_id (TEXT)
+  - meddra_id (INTEGER)
+  - meddra_name (TEXT)
+
+Table: drug_target_interactions
+  - drug_chembl_id (TEXT)
+  - target_uniprot_id (TEXT)
+  - label (INTEGER)
+  - smiles (TEXT)
+  - sequence (TEXT)
+  - molfile_3d (TEXT)
+  - rxcui (TEXT)
