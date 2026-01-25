@@ -1,7 +1,10 @@
 import sqlite3
 import os
+import socketio
 from typing import List, Optional, Any, Dict
 from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +17,140 @@ app = FastAPI(title="DatabaseVis Server")
 # CONSTANTS
 DB_PATH = "main.db"
 CLIENT_DIR = "client"
+
+# Socket.IO Setup
+sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
+
+# Global State for Active Training Rooms
+# Global State for Training Rooms (Persistent across disconnects)
+model_registry: Dict[str, Any] = {}
+
+# ... (Middleware and Models remain the same) ...
+
+@sio.event
+async def connect(sid, environ):
+    print(f"DEBUG: Client connected: {sid}")
+
+@sio.event
+async def disconnect(sid):
+    print(f"DEBUG: Client disconnected: {sid}")
+    # Find if this SID belongs to a model and update status
+    model_name_linked = None
+    for name, info in model_registry.items():
+        if info.get('sid') == sid:
+            info['status'] = 'disconnected'
+            info['sid'] = None
+            model_name_linked = name
+            break
+            
+    if model_name_linked:
+        # Broadcast update so frontend sees it went offline
+        await sio.emit('active_models_update', list(model_registry.values()))
+
+@sio.event
+async def register_model(sid, data):
+    """
+    Model registers itself.
+    Data expected: { "model_name": "Model01", "status": "training", ... }
+    """
+    model_name = data.get("model_name")
+    if model_name:
+        # If exists, update existing entry (resume session)
+        if model_name in model_registry:
+            entry = model_registry[model_name]
+            entry['status'] = 'training'
+            entry['sid'] = sid
+            # potentially valid: entry['latest_epoch'] might stay as is or reset?
+            # User wants history, so we keep previous chunks in 'history'
+        else:
+            # New entry
+            model_registry[model_name] = {
+                "id": f"{model_name}_{sid}", # Simple unique ID if needed
+                "model_name": model_name,
+                "status": "training",
+                "sid": sid,
+                "latest_epoch": 0,
+                "headers": [],
+                "history": [] # Store list of rows: [{epoch, data:[]}, ...]
+            }
+            
+        await sio.enter_room(sid, model_name)
+        # Broadcast updated list
+        await sio.emit('active_models_update', list(model_registry.values()))
+        print(f"DEBUG: Model registered/resumed: {model_name} (SID: {sid})")
+        print(f"DEBUG: Room '{model_name}' created/joined by model.")
+
+@sio.event
+async def epoch_update(sid, data):
+    """
+    Model sends epoch result.
+    Data expected: { "model_name": "Model01", "epoch": 1, "headers": [], "data": [], "best": false }
+    """
+    model_name = data.get("model_name")
+    if model_name and model_name in model_registry:
+        from datetime import datetime
+        
+        entry = model_registry[model_name]
+        entry["latest_epoch"] = data.get("epoch")
+        
+        # Store each complete update as a separate history event
+        update_event = {
+            "epoch": data.get("epoch"),
+            "headers": data.get("headers", []),
+            "data": data.get("data", []),
+            "best": data.get("best", False),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Append this complete update to history
+        entry["history"].append(update_event)
+            
+        # Broadcast to room
+        await sio.emit('epoch_progress', data, room=model_name)
+        
+        # Also broadcast list update to show latest epoch
+        await sio.emit('active_models_update', list(model_registry.values()))
+
+@sio.event
+async def join_model_room(sid, model_name):
+    """
+    Frontend client asks to join a specific model's room.
+    Send them back the full history immediately.
+    """
+    print(f"DEBUG: Client {sid} requesting to join room: {model_name}")
+    await sio.enter_room(sid, model_name)
+    print(f"DEBUG: Client {sid} joined room: {model_name}")
+    
+    if model_name in model_registry:
+        entry = model_registry[model_name]
+        # Send each history event separately
+        for update_event in entry["history"]:
+            await sio.emit('epoch_progress', {
+                "model_name": model_name,
+                **update_event  # Spread the stored event (epoch, headers, data, best, timestamp)
+            }, to=sid)
+
+@sio.event
+async def leave_model_room(sid, model_name):
+    await sio.leave_room(sid, model_name)
+
+@sio.event
+async def clear_model_history(sid, data):
+    """
+    Clear history for a specific model.
+    Data expected: { "model_name": "Model01" }
+    """
+    model_name = data.get("model_name")
+    if model_name and model_name in model_registry:
+        model_registry[model_name]["history"] = []
+        print(f"DEBUG: Cleared history for {model_name}")
+        return {"success": True, "message": f"History cleared for {model_name}"}
+    return {"success": False, "message": "Model not found"}
+
+@sio.event
+async def get_active_models(sid, data=None):
+    return list(model_registry.values())
+
 
 # Middleware
 app.add_middleware(
@@ -311,6 +448,12 @@ async def spa_exception_handler(request, exc):
 async def serve_index():
     return FileResponse(os.path.join(CLIENT_DIR, "index.html"))
 
+
+
+# Wrap FastAPI app with Socket.IO
+socket_app = socketio.ASGIApp(sio, app)
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8080, reload=True)
+    # Important: Run socket_app, not app
+    uvicorn.run("server:socket_app", host="0.0.0.0", port=8080, reload=True)

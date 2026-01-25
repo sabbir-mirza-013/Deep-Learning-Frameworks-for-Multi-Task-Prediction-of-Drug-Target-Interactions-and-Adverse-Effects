@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
@@ -10,6 +10,7 @@
     <script src="/assets/tailwindcss.js"></script>
     <script src="/assets/vue.global.js"></script>
     <script src="/assets/chart.js"></script>
+    <script src="/assets/socket.io.min.js"></script>
 
     <!-- Tailwind Config for Duct Calculator Style -->
     <script>
@@ -175,12 +176,19 @@
               class="text-sm font-medium transition-colors hover:text-white"
               >Mappings</a
             >
+            <a
+              href="#"
+              @click.prevent="navigate('/training')"
+              :class="{'text-white': currentTab === 'training', 'text-vercel-accents-5': currentTab !== 'training'}"
+              class="text-sm font-medium transition-colors hover:text-white"
+              >Training</a
+            >
           </div>
         </div>
       </nav>
 
       <!-- Main Content -->
-      <main class="flex-1 max-w-7xl mx-auto w-full px-6 py-10">
+      <main class="flex-1 w-full px-6 py-10">
         <!-- STATS PAGE -->
         <div v-if="currentTab === 'stats'" class="animate-fade-in">
           <div class="mb-12">
@@ -780,8 +788,8 @@
                     :class="{'text-vercel-success': detailData.interaction.label === 1, 'text-vercel-error': detailData.interaction.label === 0}"
                     class="font-bold text-lg"
                   >
-                    {{ detailData.interaction.label === 1 ? 
-                      'Positive Interaction' : 'Negative Interaction' }}
+                    {{ detailData.interaction.label === 1 ?
+                    'PositiveInteraction' : 'NegativeInteraction' }}
                   </span>
                 </div>
                 <div>
@@ -883,6 +891,205 @@
             </div>
           </div>
         </div>
+
+        <!-- TRAINING VIEW -->
+        <div v-if="currentTab === 'training'" class="animate-fade-in">
+          <div class="mb-8">
+            <h1 class="text-4xl font-bold mb-2">Model Training</h1>
+            <p class="text-vercel-accents-5">
+              Real-time monitoring of active training sessions
+            </p>
+          </div>
+
+          <div
+            class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-250px)]"
+          >
+            <!-- Sidebar: Active Models (Smaller width) -->
+            <div
+              class="lg:col-span-2 geist-card p-4 flex flex-col h-full border-r border-vercel-gray"
+            >
+              <h3
+                class="text-sm font-bold uppercase text-vercel-accents-5 mb-4 tracking-wider"
+              >
+                Active Rooms
+              </h3>
+
+              <div
+                v-if="activeModels.length === 0"
+                class="text-vercel-accents-5 text-sm italic py-4"
+              >
+                No active training sessions.
+              </div>
+
+              <div class="space-y-2 overflow-y-auto flex-1">
+                <button
+                  v-for="model in activeModels"
+                  :key="model.model_name"
+                  @click="selectModel(model)"
+                  :class="{'bg-vercel-accents-2 border-vercel-accents-3 text-white': selectedModel?.model_name === model.model_name, 'text-vercel-accents-5 hover:bg-vercel-accents-1 hover:text-white': selectedModel?.model_name !== model.model_name}"
+                  class="w-full text-left px-3 py-3 rounded border border-transparent transition-all flex items-center justify-between group"
+                >
+                  <div>
+                    <div class="font-mono font-bold text-sm">
+                      {{ model.model_name }}
+                    </div>
+                    <div class="text-xs opacity-70 flex items-center gap-2">
+                      <span
+                        class="w-2 h-2 rounded-full bg-vercel-success animate-pulse"
+                      ></span>
+                      {{ model.status }}
+                    </div>
+                  </div>
+                  <div class="text-xs font-mono">
+                    Ep: {{ model.latest_epoch }}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Main Area: Training Details (Wider) -->
+            <div
+              class="lg:col-span-10 geist-card p-6 flex flex-col h-full relative overflow-hidden"
+            >
+              <div
+                v-if="!selectedModel"
+                class="flex flex-col items-center justify-center h-full text-vercel-accents-5"
+              >
+                <svg
+                  class="w-16 h-16 mb-4 opacity-20"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  ></path>
+                </svg>
+                <p>Select a model to view training progress</p>
+              </div>
+
+              <div v-else class="flex flex-col h-full">
+                <div
+                  class="flex items-center justify-between mb-6 pb-4 border-b border-vercel-gray"
+                >
+                  <div>
+                    <h2 class="text-2xl font-bold flex items-center gap-3">
+                      {{ selectedModel.model_name }}
+                      <span
+                        class="text-xs bg-vercel-accents-2 text-vercel-success px-2 py-1 rounded-full border border-vercel-accents-3"
+                        >Live</span
+                      >
+                    </h2>
+                    <p class="text-sm text-vercel-accents-5 mt-1">
+                      Monitoring Epoch {{ currentTrainingData?.epoch ||
+                      selectedModel.latest_epoch || '-' }}
+                    </p>
+                  </div>
+
+                  <div
+                    class="flex items-center gap-4 text-xs font-mono text-vercel-accents-5"
+                  >
+                    <button
+                      @click="clearHistory"
+                      class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold uppercase tracking-wider transition-colors"
+                    >
+                      Clear History
+                    </button>
+                    <div
+                      v-if="socketStatus === 'connected'"
+                      class="flex items-center gap-1 text-vercel-success"
+                    >
+                      <span
+                        class="w-2 h-2 bg-vercel-success rounded-full"
+                      ></span>
+                      Connected
+                    </div>
+                    <div
+                      v-else
+                      class="flex items-center gap-1 text-vercel-error"
+                    >
+                      <span class="w-2 h-2 bg-vercel-error rounded-full"></span>
+                      Disconnected
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Use Loop for separate updates -->
+                <div class="flex-1 flex flex-col gap-6 overflow-y-auto">
+                  <div
+                    v-if="!currentTrainingData || !currentTrainingData.updates || currentTrainingData.updates.length === 0"
+                    class="mt-12 text-center text-vercel-accents-5 animate-pulse"
+                  >
+                    Waiting for first epoch update...
+                  </div>
+
+                  <div
+                    v-else
+                    v-for="(update, uIdx) in currentTrainingData.updates"
+                    :key="uIdx"
+                    :class="update.best ? 'border-l-4 border-l-yellow-400 bg-gradient-to-r from-yellow-900/20 to-black' : 'border-l-4 border-l-vercel-success bg-black'"
+                    class="geist-card p-4 rounded-none"
+                  >
+                    <div class="mb-2 flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <h4
+                          class="font-bold text-sm uppercase tracking-widest text-vercel-accents-5"
+                        >
+                          Epoch {{ update.epoch }} Update
+                        </h4>
+                        <span
+                          v-if="update.best"
+                          class="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded-full font-bold uppercase tracking-wider"
+                        >
+                          ⭐ Best
+                        </span>
+                      </div>
+                      <span class="text-xs text-vercel-accents-6 font-mono">
+                        {{ update.data.length }} rows
+                      </span>
+                    </div>
+
+                    <div
+                      class="overflow-x-auto border border-vercel-gray rounded"
+                    >
+                      <table class="min-w-full divide-y divide-vercel-gray">
+                        <thead class="bg-vercel-accents-1">
+                          <tr>
+                            <th
+                              v-for="header in update.headers"
+                              :key="header"
+                              class="px-4 py-2 text-left text-xs font-medium text-vercel-accents-5 uppercase tracking-wider"
+                            >
+                              {{ header }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-vercel-gray/30">
+                          <tr
+                            v-for="(row, rIdx) in update.data"
+                            :key="rIdx"
+                            class="hover:bg-vercel-accents-1 transition-colors"
+                          >
+                            <td
+                              v-for="(cell, cIdx) in row"
+                              :key="cIdx"
+                              class="px-4 py-2 whitespace-nowrap text-sm text-gray-300 font-mono"
+                            >
+                              {{ cell }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </main>
 
       <footer
@@ -910,6 +1117,12 @@
           const molFileExpanded = ref(false);
           const previousTab = ref(null);
           const detailedStats = ref({});
+          const activeModels = ref([]);
+          const selectedModel = ref(null);
+          const currentTrainingData = ref(null);
+          const modelHistory = ref({});
+          const socketStatus = ref("disconnected");
+          const socket = ref(null);
 
           const limits = ref({
             drugs: 10,
@@ -966,6 +1179,7 @@
             "/stats": "stats",
             "/interactions": "interactions",
             "/mappings": "mappings",
+            "/training": "training",
           };
 
           const navigate = (path, state = {}) => {
@@ -1047,7 +1261,7 @@
             loadingStates.value.drugs = true;
             try {
               const res = await fetch(
-                `/api/top-drugs?limit=${limits.value.drugs}`
+                `/api/top-drugs?limit=${limits.value.drugs}`,
               );
               chartData.value.drugs = await res.json();
               setTimeout(() => initDrugsChart(), 100);
@@ -1060,7 +1274,7 @@
             loadingStates.value.targets = true;
             try {
               const res = await fetch(
-                `/api/top-targets?limit=${limits.value.targets}`
+                `/api/top-targets?limit=${limits.value.targets}`,
               );
               chartData.value.targets = await res.json();
               setTimeout(() => initTargetsChart(), 100);
@@ -1073,7 +1287,7 @@
             loadingStates.value.sideEffects = true;
             try {
               const res = await fetch(
-                `/api/top-side-effects?limit=${limits.value.sideEffects}`
+                `/api/top-side-effects?limit=${limits.value.sideEffects}`,
               );
               chartData.value.sideEffects = await res.json();
               setTimeout(() => initSideEffectsChart(), 100);
@@ -1359,7 +1573,7 @@
 
               if (pushNav) {
                 navigate(
-                  `/interaction-details?drug=${drugId}&target=${targetId}`
+                  `/interaction-details?drug=${drugId}&target=${targetId}`,
                 );
               }
 
@@ -1385,10 +1599,135 @@
           // Handle browser back/forward buttons
           window.addEventListener("popstate", handleRoute);
 
+          window.addEventListener("popstate", handleRoute);
+
           onMounted(() => {
             handleRoute();
             fetchStats();
+
+            // Initialize Socket.IO
+            socket.value = io();
+
+            socket.value.on("connect", () => {
+              socketStatus.value = "connected";
+              // Request active models on connect
+              socket.value.emit("get_active_models", {}, (response) => {
+                if (Array.isArray(response)) activeModels.value = response;
+              });
+            });
+
+            socket.value.on("disconnect", () => {
+              socketStatus.value = "disconnected";
+            });
+
+            socket.value.on("active_models_update", (models) => {
+              activeModels.value = models;
+            });
+
+            socket.value.on("epoch_progress", (data) => {
+              console.log("Frontend received update:", data);
+              const mName = data.model_name;
+
+              if (!modelHistory.value[mName]) {
+                modelHistory.value[mName] = {
+                  updates: [],
+                  epoch: 0,
+                  model_name: mName,
+                };
+              }
+
+              // Backend sends each update as a separate event
+              if (
+                data.data &&
+                Array.isArray(data.data) &&
+                data.data.length > 0
+              ) {
+                const updateBlock = {
+                  epoch: data.epoch,
+                  headers: data.headers || [],
+                  data: data.data,
+                  best: data.best || false,
+                  timestamp: data.timestamp,
+                };
+
+                // Deduplicate: If this epoch already exists in history, replace it. Otherwise, append.
+                const existingIdx = modelHistory.value[mName].updates.findIndex(
+                  (u) => u.epoch === data.epoch,
+                );
+                if (existingIdx !== -1) {
+                  modelHistory.value[mName].updates[existingIdx] = updateBlock;
+                } else {
+                  modelHistory.value[mName].updates.push(updateBlock);
+                }
+
+                // Keep updates sorted by epoch descending (latest on top)
+                modelHistory.value[mName].updates.sort(
+                  (a, b) => b.epoch - a.epoch,
+                );
+              }
+              modelHistory.value[mName].epoch = data.epoch;
+
+              // Force View Update
+              if (
+                selectedModel.value &&
+                mName === selectedModel.value.model_name
+              ) {
+                currentTrainingData.value = { ...modelHistory.value[mName] };
+              }
+
+              const idx = activeModels.value.findIndex(
+                (m) => m.model_name === mName,
+              );
+              if (idx !== -1) {
+                activeModels.value[idx].latest_epoch = data.epoch;
+              }
+            });
           });
+
+          const selectModel = (model) => {
+            // Leave previous room if any
+            if (selectedModel.value && socket.value) {
+              socket.value.emit(
+                "leave_model_room",
+                selectedModel.value.model_name,
+              );
+            }
+
+            selectedModel.value = model;
+
+            // Load existing history if available, else prep null
+            if (modelHistory.value[model.model_name]) {
+              currentTrainingData.value = modelHistory.value[model.model_name];
+            } else {
+              currentTrainingData.value = null;
+            }
+
+            // Join new room
+            if (socket.value) {
+              socket.value.emit("join_model_room", model.model_name);
+            }
+          };
+
+          const clearHistory = () => {
+            if (!selectedModel.value || !socket.value) return;
+
+            const modelName = selectedModel.value.model_name;
+
+            // Clear local history
+            if (modelHistory.value[modelName]) {
+              modelHistory.value[modelName].updates = [];
+              currentTrainingData.value = { ...modelHistory.value[modelName] };
+            }
+
+            // Clear backend history
+            socket.value.emit(
+              "clear_model_history",
+              { model_name: modelName },
+              (response) => {
+                console.log("Clear history response:", response);
+              },
+            );
+          };
 
           return {
             stats,
@@ -1422,6 +1761,12 @@
             fetchTopSideEffects,
             calculateHeight,
             chartData,
+            activeModels,
+            selectedModel,
+            currentTrainingData,
+            socketStatus,
+            selectModel,
+            clearHistory,
           };
         },
       }).mount("#app");
